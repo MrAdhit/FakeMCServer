@@ -4,8 +4,6 @@ const fs = require("fs");
 
 const server = net.createServer();
 
-// The hostname that you want to use (you can't connect using 127.0.0.1 even though you use localhost as hostname)
-const hostname = "localhost";
 const port = process.env.PORT || 25565;
 
 let icon = "./example.png";
@@ -27,8 +25,8 @@ const config = {
         "online": 5,
         "sample": [
             {
-                "name": "thinkofdeath",
-                "id": "4566e69f-c907-48ee-8d71-d7ba5aa00d20"
+                "name": "MrAdhit",
+                "id": "00222178-15ae-4ba7-8816-dd0fcae5382b"
             }
         ]
     },
@@ -57,30 +55,46 @@ const kickMessage = {
 }
 
 server.on("connection", (socket) => {
-    socket.on("data", (data => {
-        // Maybe someone can improve this?
-        if(!data.toString("utf-8").includes(hostname)){
-            /* 
-            Response for ping
-            https://wiki.vg/Server_List_Ping#Ping
-            */
-            socket.write(data)
-        }else{
-            if(data.slice(0, -2)[data.slice(0, -2).length - 1] != 1){
+    socket.on("data", (data) => {
+        console.log(data.toString("hex"))
+        const baseBuffer = data.slice(data.indexOf(0x00) + 1, data.length)
+        const player = baseBuffer.slice(baseBuffer.indexOf(0x00) + 2, data.length).toString("utf8");
+        const protocol = parseInt(leb.signed.decode(baseBuffer.slice(0, 2)));
+        const hostname = baseBuffer.slice(3, baseBuffer.indexOf(0x00) - 4).toString("utf8");
+        const port = baseBuffer.slice(baseBuffer.indexOf(0x00) - 4, baseBuffer.indexOf(0x00) - 2).readUInt16BE();
+        const state = baseBuffer.slice(baseBuffer.indexOf(0x00) - 2, baseBuffer.indexOf(0x00) - 1).readInt8();
+        
+        // Perhaps someone can change the logging message? :/
+        switch(state){
+            case 1:
+                /*
+                Response handshake with server status
+                https://wiki.vg/Server_List_Ping#Handshake
+                */
+
+                // Changing the protocol to client protocol
+                config.version.protocol = protocol
+                
+                log(`Handshake is initiated with hostname ${hostname} and port ${port}`);
+
+                socket.write(encode(config));  
+                break;
+            case 2:
                 /*
                 Response when client tries to connect
                 https://wiki.vg/Protocol#Disconnect_.28login.29
                 */
+
+                log(`${player} is trying to connect to ${hostname}:${port}`);
+
                 socket.write(encode(kickMessage));
-            }else{
-                /*
-                Response status handshake
-                https://wiki.vg/Server_List_Ping#Handshake
-                */
-               socket.write(encode(config));
-            }
+                break;
+            default:
+                log(`Responding to ping`);
+                socket.write(data);
+                break
         }
-    }));
+    });
 });
 
 function encode(data){
