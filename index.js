@@ -55,44 +55,50 @@ const kickMessage = {
 }
 
 server.on("connection", (socket) => {
+    let buffer = Buffer.alloc(0);
     socket.on("data", (data) => {
-        console.log(data.toString("hex"))
-        const baseBuffer = data.slice(data.indexOf(0x00) + 1, data.length)
-        const player = baseBuffer.slice(baseBuffer.indexOf(0x00) + 2, data.length).toString("utf8");
-        const protocol = parseInt(leb.signed.decode(baseBuffer.slice(0, 2)));
-        const hostname = baseBuffer.slice(3, baseBuffer.indexOf(0x00) - 4).toString("utf8");
-        const port = baseBuffer.slice(baseBuffer.indexOf(0x00) - 4, baseBuffer.indexOf(0x00) - 2).readUInt16BE();
-        const state = baseBuffer.slice(baseBuffer.indexOf(0x00) - 2, baseBuffer.indexOf(0x00) - 1).readInt8();
-        
-        // Perhaps someone can change the logging message? :/
-        switch(state){
-            case 1:
-                /*
-                Response handshake with server status
-                https://wiki.vg/Server_List_Ping#Handshake
-                */
+        buffer = Buffer.concat([buffer, data]);
+        if(buffer.length < 19 && buffer.length > 10) return;
+        try {
+            const baseBuffer = buffer.slice(buffer.indexOf(0x00) + 1, buffer.length)
+            const player = baseBuffer.slice(baseBuffer.indexOf(0x00) + 2, buffer.length).toString("utf8");
+            const protocol = parseInt(leb.signed.decode(baseBuffer.slice(0, 2)));
+            const hostname = baseBuffer.slice(3, baseBuffer.indexOf(0x00) - 4).toString("utf8");
+            const port = baseBuffer.slice(baseBuffer.indexOf(0x00) - 4, baseBuffer.indexOf(0x00) - 2).readUInt16BE();
+            const state = baseBuffer.slice(baseBuffer.indexOf(0x00) - 2, baseBuffer.indexOf(0x00) - 1).readInt8();
+            // Perhaps someone can change the logging message? :/
+            switch(state){
+                case 1:
+                    /*
+                    Response handshake with server status
+                    https://wiki.vg/Server_List_Ping#Handshake
+                    */
 
-                // Changing the protocol to client protocol
-                config.version.protocol = protocol
-                
-                log(`Handshake is initiated with hostname ${hostname} and port ${port}`);
+                    // Changing the protocol to client protocol
+                    config.version.protocol = protocol
+                    
+                    log(`Handshake is initiated with hostname ${hostname} and port ${port}`);
 
-                socket.write(encode(config));  
-                break;
-            case 2:
-                /*
-                Response when client tries to connect
-                https://wiki.vg/Protocol#Disconnect_.28login.29
-                */
+                    socket.write(encode(config));  
+                    break;
+                case 2:
+                    /*
+                    Response when client tries to connect
+                    https://wiki.vg/Protocol#Disconnect_.28login.29
+                    */
 
-                log(`${player} is trying to connect to ${hostname}:${port}`);
+                    log(`${player} is trying to connect to ${hostname}:${port}`);
 
-                socket.write(encode(kickMessage));
-                break;
-            default:
-                log(`Responding to ping`);
-                socket.write(data);
-                break
+                    socket.write(encode(kickMessage));
+                    break;
+                default:
+                    log(`Responding to ping`);
+                    socket.write(buffer);
+                    break
+            }
+            buffer = Buffer.alloc(0);
+        } catch (error) {
+            console.error(error);
         }
     });
 });
