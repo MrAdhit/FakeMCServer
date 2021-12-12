@@ -1,5 +1,4 @@
 const net = require("net");
-const leb = require("leb128");
 const fs = require("fs");
 
 const server = net.createServer();
@@ -62,10 +61,11 @@ server.on("connection", (socket) => {
         try {
             const baseBuffer = buffer.slice(buffer.indexOf(0x00) + 1, buffer.length)
             const player = baseBuffer.slice(baseBuffer.indexOf(0x00) + 2, buffer.length).toString("utf8");
-            const protocol = parseInt(leb.signed.decode(baseBuffer.slice(0, 2)));
+            const protocol = leb.decode(Array.prototype.slice.call(baseBuffer.slice(0, 2)));
             const hostname = baseBuffer.slice(3, baseBuffer.indexOf(0x00) - 4).toString("utf8");
             const port = baseBuffer.slice(baseBuffer.indexOf(0x00) - 4, baseBuffer.indexOf(0x00) - 2).readUInt16BE();
             const state = baseBuffer.slice(baseBuffer.indexOf(0x00) - 2, baseBuffer.indexOf(0x00) - 1).readInt8();
+            
             // Perhaps someone can change the logging message? :/
             switch(state){
                 case 1:
@@ -105,7 +105,39 @@ server.on("connection", (socket) => {
 
 function encode(data){
     data = Buffer.from(JSON.stringify(data), "utf-8");
-    return Buffer.concat([leb.signed.encode(data.byteLength + leb.signed.encode(data.byteLength).byteLength + 1), new Buffer.alloc(1), leb.signed.encode(data.byteLength), data]);
+    return Buffer.concat([leb.encode(data.byteLength + leb.encode(data.byteLength).byteLength + 1), new Buffer.alloc(1), leb.encode(data.byteLength), data]);
+}
+
+// https://en.wikipedia.org/wiki/LEB128#JavaScript_code
+const leb = {
+    encode: (value) => {
+        value |= 0;
+        const result = [];
+        while(true){
+            const byte = value & 0x7f;
+            value >>= 7;
+            if((value === 0 && (byte & 0x40) === 0) || (value === -1 && (byte & 0x40) !== 0)){
+                result.push(byte);
+                return Buffer.from(result);
+            }
+            result.push(byte | 0x80);
+        }
+    },
+    decode: (input) => {
+        let result = 0;
+        let shift = 0;
+        while(true){
+            const byte = input.shift();
+            result |= (byte & 0x7f) << shift;
+            shift += 7;
+            if((0x80 & byte) === 0){
+                if(shift < 32 && (byte & 0x40) !== 0){
+                    return result | (~0 << shift);
+                }
+                return result;
+            }
+        }
+    }
 }
 
 server.listen(port, null, () => {

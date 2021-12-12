@@ -7,8 +7,5 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "MrAdhit <adhityarimba97@gmail.com>",
-  "license": "GPL-3.0",
-  "dependencies": {
-    "leb128": "^0.0.5"
-  }
+  "license": "GPL-3.0"
 }
