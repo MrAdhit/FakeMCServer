@@ -57,15 +57,16 @@ server.on("connection", (socket) => {
     let buffer = Buffer.alloc(0);
     socket.on("data", (data) => {
         buffer = Buffer.concat([buffer, data]);
-        if(buffer.length < 19 && buffer.length > 10) return;
+        const baseBuffer = buffer.slice(buffer.indexOf(0x00) + 1, buffer.length);
+        const hostname = (parsePacket.hostname(baseBuffer).length <= 10 ? parsePacket.hostname(baseBuffer).length + 10 : parsePacket.hostname(baseBuffer).length);
+        if(buffer.length < hostname && buffer.length > 10) return;
         try {
-            const baseBuffer = buffer.slice(buffer.indexOf(0x00) + 1, buffer.length)
-            const player = baseBuffer.slice(baseBuffer.indexOf(0x00) + 2, buffer.length).toString("utf8");
-            const protocol = leb.decode(Array.prototype.slice.call(baseBuffer.slice(0, 2)));
-            const hostname = baseBuffer.slice(3, baseBuffer.indexOf(0x00) - 4).toString("utf8");
-            const port = baseBuffer.slice(baseBuffer.indexOf(0x00) - 4, baseBuffer.indexOf(0x00) - 2).readUInt16BE();
-            const state = baseBuffer.slice(baseBuffer.indexOf(0x00) - 2, baseBuffer.indexOf(0x00) - 1).readInt8();
-            
+            const player = parsePacket.player(buffer, baseBuffer);
+            const protocol = parsePacket.protocol(baseBuffer);
+            const hostname = parsePacket.hostname(baseBuffer);
+            const port = parsePacket.port(baseBuffer);
+            const state = parsePacket.state(baseBuffer);
+
             // Perhaps someone can change the logging message? :/
             switch(state){
                 case 1:
@@ -105,7 +106,7 @@ server.on("connection", (socket) => {
 
 function encode(data){
     data = Buffer.from(JSON.stringify(data), "utf-8");
-    return Buffer.concat([leb.encode(data.byteLength + leb.encode(data.byteLength).byteLength + 1), new Buffer.alloc(1), leb.encode(data.byteLength), data]);
+    return Buffer.concat([leb. encode(data.byteLength+ leb.encode(data.byteLength).byteLength + 1), new Buffer.alloc(1), leb.encode(data.byteLength), data]);
 }
 
 // https://en.wikipedia.org/wiki/LEB128#JavaScript_code
@@ -137,6 +138,47 @@ const leb = {
                 return result;
             }
         }
+    }
+}
+
+// Parse value from response packet
+const parsePacket = {
+    hostname: (buffer) => {
+        let val1 = 3;
+        let val2 = (buffer.indexOf(0x00) == -1 ? buffer.length - 3 : buffer.indexOf(0x00) - 4);
+
+        let result = buffer.slice(val1, val2).toString("utf8");
+
+        return result;
+    },
+    port: (buffer) => {
+        let val1 = (buffer.indexOf(0x00) == -1 ? buffer.length - 3 : buffer.indexOf(0x00) - 4);
+        let val2 = (buffer.indexOf(0x00) == -1 ? buffer.length - 1 : buffer.indexOf(0x00) - 2);
+
+        let result = buffer.slice(val1, val2).readUInt16BE();
+
+        return result;
+    },
+    protocol: (buffer) => {
+        return leb.decode(Array.prototype.slice.call(buffer.slice(0, 2)));
+    },
+    player: (rawBuffer, buffer) => {
+        if(buffer.indexOf(0x00) == -1) return "";
+        let val1 = buffer.indexOf(0x00) + 2;
+        let val2 = rawBuffer.length;
+
+
+        let result = buffer.slice(val1, val2).toString("utf8");
+
+        return result;
+    },
+    state: (buffer) => {
+        let val1 = (buffer.indexOf(0x00) == -1 ? buffer.length - 1 : buffer.indexOf(0x00) - 2);
+        let val2 = (buffer.indexOf(0x00) == -1 ? buffer.length : buffer.indexOf(0x00) - 1);
+
+        let result = buffer.slice(val1, val2).readInt8();
+
+        return result;
     }
 }
 
